@@ -87,10 +87,62 @@ let tray: Tray | null = null;
 let selectedSourceName = "";
 const isMac = process.platform === "darwin";
 const trayIconSize = isMac ? 16 : 24;
+const OPENSCREEN_PROJECT_EXTENSION = ".openscreen";
 
 // Tray Icons
 const defaultTrayIcon = getTrayIcon("openscreen.png", trayIconSize);
 const recordingTrayIcon = getTrayIcon("rec-button.png", trayIconSize);
+
+function resolveProjectPathFromArgv(argv: string[]) {
+	for (let index = 0; index < argv.length; index += 1) {
+		const arg = argv[index];
+		let candidate: string | undefined;
+		if (arg.startsWith("--open-project=")) {
+			candidate = arg.slice("--open-project=".length);
+		} else if (arg === "--open-project") {
+			candidate = argv[index + 1];
+		} else if (path.extname(arg).toLowerCase() === OPENSCREEN_PROJECT_EXTENSION) {
+			candidate = arg;
+		}
+
+		if (candidate && path.extname(candidate).toLowerCase() === OPENSCREEN_PROJECT_EXTENSION) {
+			return path.resolve(candidate);
+		}
+	}
+
+	return null;
+}
+
+let pendingOpenProjectPath: string | null =
+	(process.env.OPENSCREEN_OPEN_PROJECT
+		? path.resolve(process.env.OPENSCREEN_OPEN_PROJECT)
+		: null) ?? resolveProjectPathFromArgv(process.argv);
+
+function openProjectInEditor(projectPath: string | null) {
+	if (!projectPath) return;
+	pendingOpenProjectPath = projectPath;
+	if (!app.isReady()) return;
+	createEditorWindowWrapper(projectPath);
+	pendingOpenProjectPath = null;
+}
+
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+if (!hasSingleInstanceLock) {
+	app.exit(0);
+} else {
+	app.on("second-instance", (_event, argv) => {
+		openProjectInEditor(resolveProjectPathFromArgv(argv));
+	});
+}
+
+app.on("open-file", (event, filePath) => {
+	if (path.extname(filePath).toLowerCase() !== OPENSCREEN_PROJECT_EXTENSION) {
+		return;
+	}
+
+	event.preventDefault();
+	openProjectInEditor(path.resolve(filePath));
+});
 
 function createWindow() {
 	mainWindow = createHudOverlayWindow();
@@ -365,14 +417,14 @@ function forceCloseEditorWindow(windowToClose: BrowserWindow | null) {
 	});
 }
 
-function createEditorWindowWrapper() {
+function createEditorWindowWrapper(initialProjectPath?: string) {
 	if (mainWindow) {
 		isForceClosing = true;
 		mainWindow.close();
 		isForceClosing = false;
 		mainWindow = null;
 	}
-	mainWindow = createEditorWindow();
+	mainWindow = createEditorWindow(initialProjectPath);
 	editorHasUnsavedChanges = false;
 
 	mainWindow.on("close", (event) => {
@@ -569,5 +621,9 @@ app.whenReady().then(async () => {
 
 	await loadAndRegisterGlobalShortcut(showMainWindow);
 
-	createWindow();
+	if (pendingOpenProjectPath) {
+		openProjectInEditor(pendingOpenProjectPath);
+	} else {
+		createWindow();
+	}
 });

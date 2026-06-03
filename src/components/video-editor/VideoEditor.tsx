@@ -519,6 +519,17 @@ export default function VideoEditor() {
 	useEffect(() => {
 		async function loadInitialData() {
 			try {
+				const openProjectPath = new URLSearchParams(window.location.search).get("openProjectPath");
+				if (openProjectPath) {
+					const result = await nativeBridgeClient.project.loadProjectFileFromPath(openProjectPath);
+					if (result.success && result.project) {
+						const restored = await applyLoadedProject(result.project, result.path ?? openProjectPath);
+						if (restored) {
+							return;
+						}
+					}
+				}
+
 				const currentProjectResult = await nativeBridgeClient.project.loadCurrentProjectFile();
 				if (currentProjectResult.success && currentProjectResult.project) {
 					const restored = await applyLoadedProject(

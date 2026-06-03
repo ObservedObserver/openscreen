@@ -171,7 +171,7 @@ export function createHudOverlayWindow(): BrowserWindow {
  * Creates the main editor window. Starts maximised with a hidden title bar on
  * macOS. This window is not always-on-top and appears in the taskbar/dock.
  */
-export function createEditorWindow(): BrowserWindow {
+export function createEditorWindow(initialProjectPath?: string): BrowserWindow {
 	const isMac = process.platform === "darwin";
 
 	const win = new BrowserWindow({
@@ -221,10 +221,18 @@ export function createEditorWindow(): BrowserWindow {
 	});
 
 	if (VITE_DEV_SERVER_URL) {
-		win.loadURL(VITE_DEV_SERVER_URL + "?windowType=editor");
+		const url = new URL(VITE_DEV_SERVER_URL);
+		url.searchParams.set("windowType", "editor");
+		if (initialProjectPath) {
+			url.searchParams.set("openProjectPath", initialProjectPath);
+		}
+		win.loadURL(url.toString());
 	} else {
 		win.loadFile(path.join(RENDERER_DIST, "index.html"), {
-			query: { windowType: "editor" },
+			query: {
+				windowType: "editor",
+				...(initialProjectPath ? { openProjectPath: initialProjectPath } : {}),
+			},
 		});
 	}
 
